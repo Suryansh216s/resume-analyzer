@@ -22,6 +22,10 @@
             <li>{{ keyword }}</li>
         {% endfor %}
     </ul>
+    <h3>AI-Powered Suggestions:</h3>
+    <div class="suggestions">
+        {{ result.suggestions | safe }}
+    </div>
     <a href="/">Back to Home</a>
 </body>
 </html>

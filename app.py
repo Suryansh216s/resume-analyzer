@@ -2,8 +2,14 @@ from flask import Flask, render_template, request
 import os
 from PyPDF2 import PdfReader
 import spacy
+import google.generativeai as genai
+from dotenv import load_dotenv
 
 app = Flask(__name__)
+
+# Load environment variables
+load_dotenv()
+gemini_api_key = os.getenv('GEMINI_API_KEY')
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
@@ -16,6 +22,10 @@ if not os.path.exists(UPLOAD_FOLDER):
 # Load SpaCy model
 nlp = spacy.load('en_core_web_sm')
 
+# Initialize Gemini API
+genai.configure(api_key=gemini_api_key)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
 def extract_keywords(text):
     """Extract keywords (nouns, proper nouns, entities) from text using SpaCy."""
     doc = nlp(text)
@@ -23,7 +33,28 @@ def extract_keywords(text):
     for token in doc:
         if token.pos_ in ('NOUN', 'PROPN') or token.ent_type_:
             keywords.append(token.text.lower())
-    return set(keywords)  # Remove duplicates
+    return set(keywords)
+
+def generate_suggestions(missing_keywords, job_description):
+    """Generate resume improvement suggestions using Gemini API."""
+    if not missing_keywords:
+        return "Your resume aligns well with the job description!"
+    prompt = f"""
+    You are a career coach. A job seeker is applying for a role with the following job description:
+    '{job_description[:500]}'
+    Their resume is missing these keywords: {', '.join(missing_keywords)}.
+    Provide 2-3 concise suggestions to improve their resume, focusing on incorporating these keywords.
+    Format as a bullet list.
+    """
+    try:
+        response = model.generate_content(prompt)
+        suggestions = response.text.strip()
+        # Ensure bullet points are formatted
+        if not suggestions.startswith('-'):
+            suggestions = '\n'.join([f"- {line}" for line in suggestions.split('\n') if line.strip()])
+        return suggestions or "Could not generate specific suggestions, but consider adding the missing keywords."
+    except Exception as e:
+        return f"Error generating suggestions: {str(e)}"
 
 @app.route('/')
 def home():
@@ -54,11 +85,14 @@ def upload_file():
             # Compare keywords
             matched_keywords = resume_keywords.intersection(job_keywords)
             missing_keywords = job_keywords - resume_keywords
+            # Generate AI suggestions
+            suggestions = generate_suggestions(missing_keywords, job_description)
             # Prepare response
             result = {
                 'matched': list(matched_keywords),
                 'missing': list(missing_keywords),
-                'resume_text': resume_text[:500]  # Truncate for display
+                'resume_text': resume_text[:500],
+                'suggestions': suggestions
             }
             return render_template('result.html', result=result)
         except Exception as e:

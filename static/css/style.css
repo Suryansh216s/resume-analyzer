@@ -8,6 +8,9 @@ body {
 h1 {
     color: #333;
 }
+h3 {
+    color: #555;
+}
 form div {
     margin: 20px 0;
 }
@@ -42,4 +45,11 @@ li {
     margin: 5px 0;
     padding: 10px;
     border-radius: 4px;
+}
+.suggestions {
+    text-align: left;
+    background-color: #e9ecef;
+    padding: 15px;
+    border-radius: 4px;
+    margin: 20px 0;
 }
