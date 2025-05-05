@@ -21,7 +21,6 @@
  ## Setup Instructions
  ### Prerequisites
  - Python 3.9+
- - Docker
  - Google Gemini API key (get from [Google AI Studio](https://makersuite.google.com/))
 
  ### Local Setup
