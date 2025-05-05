@@ -9,14 +9,14 @@
  - **AI-Powered Suggestions**: Provides detailed analysis (Summary, Strengths, Weaknesses, Suggestions, SWOT) using Gemini AI.
  - **Interactive UI**: Responsive design with keyword cloud, badges, and score bar.
  - **Dockerized**: Packaged for consistent deployment.
- - **Live Demo**: Try it at [https://resume-analyzer-suryansh.herokuapp.com](https://resume-analyzer-suryansh.herokuapp.com).
+ - **Live Demo**: Try it at [https://resume-analyzer-suryansh.herokuapp.com](https://resume-analyzer-suryansh-57e7b382464a.herokuapp.com/).
 
  ## Tech Stack
  - **Backend**: Flask, Python
  - **AI/NLP**: Google Gemini AI, SpaCy
  - **Frontend**: Bootstrap, WordCloud.js
  - **PDF Processing**: PyPDF2
- - **Deployment**: Docker, Heroku
+ - **Deployment**: Heroku
 
  ## Setup Instructions
  ### Prerequisites
