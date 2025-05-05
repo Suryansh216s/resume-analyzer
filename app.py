@@ -5,8 +5,13 @@ import spacy
 import google.generativeai as genai
 from dotenv import load_dotenv
 import json
+import re
+import logging
 
 app = Flask(__name__)
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables
 load_dotenv()
@@ -15,12 +20,9 @@ gemini_api_key = os.getenv('GEMINI_API_KEY')
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Ensure upload folder exists
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-# Load SpaCy model
+# Load SpaCy model for keyword extraction
 nlp = spacy.load('en_core_web_sm')
 
 # Initialize Gemini API
@@ -28,88 +30,173 @@ genai.configure(api_key=gemini_api_key)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 def extract_keywords(text):
-    """Extract keywords (nouns, proper nouns, entities) from text using SpaCy."""
+    """Extract alphanumeric keywords (nouns, proper nouns, entities) from text."""
     doc = nlp(text)
-    keywords = []
-    for token in doc:
-        if token.pos_ in ('NOUN', 'PROPN') or token.ent_type_:
-            keywords.append(token.text.lower())
-    return set(keywords)
+    keywords = {token.text.lower() for token in doc 
+                if (token.pos_ in ('NOUN', 'PROPN') or token.ent_type_) and token.text.isalnum()}
+    return keywords
 
-def detect_job_domain(job_description):
-    """Detect the job domain based on keywords in the job description."""
-    tech_keywords = {'software', 'developer', 'engineer', 'data', 'scientist', 'machine', 'learning', 'ai', 'python', 'sql', 'cloud', 'devops', 'cybersecurity'}
-    finance_keywords = {'finance', 'analyst', 'banking', 'investment', 'accounting', 'audit', 'tax', 'financial', 'portfolio', 'trading'}
-    healthcare_keywords = {'healthcare', 'nurse', 'doctor', 'medical', 'pharma', 'clinical', 'patient', 'therapy', 'diagnostics'}
-    
-    doc = nlp(job_description.lower())
-    keywords = {token.text for token in doc if token.pos_ in ('NOUN', 'PROPN')}
-    
-    if keywords & tech_keywords:
-        return 'tech'
-    elif keywords & finance_keywords:
-        return 'finance'
-    elif keywords & healthcare_keywords:
-        return 'healthcare'
-    return 'general'  # Default if no specific domain is detected
-
-def calculate_resume_score(resume_text, matched_keywords, job_keywords):
-    """Calculate a resume strength score (0-100) based on keyword match, length, and formatting."""
-    # Keyword match score (50%)
-    keyword_match_ratio = len(matched_keywords) / len(job_keywords) if job_keywords else 0
-    keyword_score = keyword_match_ratio * 50  # Max 50 points
-
-    # Resume length score (30%)
-    word_count = len(resume_text.split())
-    if 500 <= word_count <= 1000:
-        length_score = 30  # Ideal length
-    elif 300 <= word_count < 500 or 1000 < word_count <= 1500:
-        length_score = 20  # Slightly off
-    else:
-        length_score = 10  # Too short or too long
-
-    # Formatting score (20%)
-    formatting_score = 0
-    key_sections = ['skills', 'experience', 'education']
-    resume_lower = resume_text.lower()
-    for section in key_sections:
-        if section in resume_lower:
-            formatting_score += 6.67  # ~20/3 points per section
-    formatting_score = min(formatting_score, 20)  # Cap at 20
-
-    # Total score
-    total_score = round(keyword_score + length_score + formatting_score)
-    return max(0, min(total_score, 100))  # Clamp between 0 and 100
-
-def generate_suggestions(missing_keywords, job_description, domain):
-    """Generate resume improvement suggestions using Gemini API, tailored to job domain."""
-    if not missing_keywords:
-        return "Your resume aligns well with the job description!"
-    
-    # Domain-specific guidance
-    domain_guidance = {
-        'tech': "Focus on technical skills, projects, and tools. Highlight GitHub projects or certifications if relevant.",
-        'finance': "Emphasize financial modeling, analytical skills, or certifications like CFA or CPA.",
-        'healthcare': "Highlight patient care experience, clinical skills, or relevant certifications like RN or MD.",
-        'general': "Focus on transferable skills and clear, concise achievements."
-    }
-    
+def extract_resume_details(resume_text):
+    """Extract name and skills using Gemini, phone and email with regex fallback."""
     prompt = f"""
-    You are a career coach specializing in {domain} roles. A job seeker is applying for a role with this job description:
-    '{job_description[:500]}'
-    Their resume is missing these keywords: {', '.join(missing_keywords)}.
-    Provide 2-3 concise suggestions to improve their resume, incorporating these keywords and following this guidance: {domain_guidance.get(domain, domain_guidance['general'])}.
-    Format as a bullet list.
+    You are a resume parser. From the resume text, extract:
+    - Candidate's name (plausible human name, not terms like 'Machine Learning')
+    - Skills (technical/relevant skills, e.g., Python, SQL)
+    Return as JSON:
+    ```json
+    {{
+        "name": "string or null",
+        "skills": ["string", ...]
+    }}
+    ```
+    Resume text:
+    '{resume_text[:2000]}'
     """
     try:
         response = model.generate_content(prompt)
-        suggestions = response.text.strip()
-        # Ensure bullet points are formatted
-        if not suggestions.startswith('-'):
-            suggestions = '\n'.join([f"- {line}" for line in suggestions.split('\n') if line.strip()])
-        return suggestions or "Could not generate specific suggestions, but consider adding the missing keywords."
+        data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
+        details = {
+            'name': data.get('name'),
+            'phone': None,
+            'email': None,
+            'skills': data.get('skills', [])
+        }
     except Exception as e:
-        return f"Error generating suggestions: {str(e)}"
+        logging.error(f"Gemini details error: {str(e)}")
+        details = {'name': None, 'phone': None, 'email': None, 'skills': []}
+    
+    # Extract phone and email with regex
+    phone_pattern = r'\b(\+?\d{1,3}[-.]?)?\(?\d{3}\)?[-.]?\d{3}[-.]?\d{4}\b'
+    if phone_match := re.search(phone_pattern, resume_text):
+        details['phone'] = phone_match.group(0)
+    
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    if email_match := re.search(email_pattern, resume_text, re.IGNORECASE):
+        details['email'] = email_match.group(0).lower()
+    
+    # Clean skills
+    details['skills'] = list(set(skill.lower() for skill in details['skills'] if skill))
+    return details
+
+def detect_job_domain(job_description):
+    """Detect job domain using Gemini."""
+    prompt = f"""
+    Identify the industry domain (tech, finance, healthcare, general) from the job description.
+    Return a single word.
+    Job description:
+    '{job_description[:1000]}'
+    """
+    try:
+        response = model.generate_content(prompt)
+        domain = response.text.strip().lower()
+        return domain if domain in ['tech', 'finance', 'healthcare', 'general'] else 'general'
+    except Exception as e:
+        logging.error(f"Gemini domain error: {str(e)}")
+        return 'general'
+
+def calculate_resume_score(resume_text, matched_keywords, job_keywords):
+    """Calculate resume score based on keyword match, length, and formatting."""
+    keyword_score = (len(matched_keywords) / len(job_keywords) * 50) if job_keywords else 0
+
+    word_count = len(resume_text.split())
+    length_score = 30 if 500 <= word_count <= 1000 else 20 if 300 <= word_count < 500 or 1000 < word_count <= 1500 else 10
+
+    formatting_score = sum(6.67 for section in ['skills', 'experience', 'education'] if section in resume_text.lower())
+    formatting_score = min(formatting_score, 20)
+
+    return max(0, min(round(keyword_score + length_score + formatting_score), 100))
+
+def generate_suggestions(missing_keywords, job_description, domain, name):
+    """Generate resume analysis using Gemini."""
+    domain_guidance = {
+        'tech': "Highlight GitHub projects, certifications, or technologies (e.g., Python, AWS).",
+        'finance': "Emphasize financial modeling, analytical skills, or certifications (e.g., CFA).",
+        'healthcare': "Focus on patient care, clinical skills, or certifications (e.g., RN).",
+        'general': "Highlight transferable skills, leadership, and achievements."
+    }
+    
+    prompt = f"""
+    You are a career coach for {domain} roles. A job seeker named {name or 'the candidate'} is applying for a role with:
+    Job description: '{job_description[:1000]}'
+    Missing keywords: {', '.join(missing_keywords)[:1000]}
+    Provide a detailed analysis with:
+    - Areas of Improvement Summary: 2-3 sentences on key gaps and ATS/recruiter impact.
+    - Strengths: 3-5 strengths based on matched keywords or inferred content, with examples.
+    - Weaknesses: 3-5 weaknesses based on missing keywords, with explanations.
+    - Suggestions for Improvement: 4-6 actionable, domain-specific suggestions, following: {domain_guidance.get(domain, domain_guidance['general'])}.
+    - SWOT Analysis: Detailed Strengths, Weaknesses, Opportunities, Threats, tailored to the job.
+    Format as:
+    ### Areas of Improvement Summary
+    [Summary]
+    ### Strengths
+    - [Strength 1]
+    - [Strength 2]
+    ...
+    ### Weaknesses
+    - [Weakness 1]
+    - [Weakness 2]
+    ...
+    ### Suggestions for Improvement
+    - [Suggestion 1]
+    - [Suggestion 2]
+    ...
+    ### SWOT Analysis
+    **Strengths:** [Strengths]
+    **Weaknesses:** [Weaknesses]
+    **Opportunities:** [Opportunities]
+    **Threats:** [Threats]
+    Be concise, professional, and use bullet points for Strengths, Weaknesses, Suggestions.
+    """
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        logging.debug(f"Gemini response: {text}")
+        
+        sections = {
+            'summary': '',
+            'strengths': '',
+            'weaknesses': '',
+            'suggestions': '',
+            'swot': {'strengths': '', 'weaknesses': '', 'opportunities': '', 'threats': ''}
+        }
+        
+        current_section = None
+        for line in text.split('\n'):
+            line = line.strip()
+            if line.startswith('### Areas of Improvement Summary'):
+                current_section = 'summary'
+            elif line.startswith('### Strengths'):
+                current_section = 'strengths'
+            elif line.startswith('### Weaknesses'):
+                current_section = 'weaknesses'
+            elif line.startswith('### Suggestions for Improvement'):
+                current_section = 'suggestions'
+            elif line.startswith('### SWOT Analysis'):
+                current_section = 'swot'
+            elif line.startswith('**Strengths:**'):
+                sections['swot']['strengths'] = line.replace('**Strengths:**', '').strip()
+            elif line.startswith('**Weaknesses:**'):
+                sections['swot']['weaknesses'] = line.replace('**Weaknesses:**', '').strip()
+            elif line.startswith('**Opportunities:**'):
+                sections['swot']['opportunities'] = line.replace('**Opportunities:**', '').strip()
+            elif line.startswith('**Threats:**'):
+                sections['swot']['threats'] = line.replace('**Threats:**', '').strip()
+            elif line and current_section in ['summary', 'strengths', 'weaknesses', 'suggestions']:
+                sections[current_section] += f"\n{line}" if sections[current_section] else line
+        
+        for key in ['summary', 'strengths', 'weaknesses', 'suggestions']:
+            sections[key] = sections[key].strip()
+        
+        return sections
+    except Exception as e:
+        logging.error(f"Gemini API error: {str(e)}")
+        return {
+            'summary': 'Unable to generate analysis. Ensure keywords are relevant.',
+            'strengths': 'Unable to identify strengths.',
+            'weaknesses': 'Unable to identify weaknesses.',
+            'suggestions': 'Add missing keywords and quantify achievements.',
+            'swot': {'strengths': 'N/A', 'weaknesses': 'N/A', 'opportunities': 'N/A', 'threats': 'N/A'}
+        }
 
 @app.route('/')
 def home():
@@ -121,44 +208,36 @@ def upload_file():
         return 'Missing resume or job description', 400
     file = request.files['resume']
     job_description = request.form['job_description']
-    if file.filename == '':
-        return 'No file selected', 400
-    if not job_description.strip():
-        return 'Job description is empty', 400
+    if file.filename == '' or not job_description.strip():
+        return 'No file selected or empty job description', 400
     if file and file.filename.endswith('.pdf'):
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filepath)
-        # Extract text from PDF
         try:
             reader = PdfReader(filepath)
-            resume_text = ''
-            for page in reader.pages:
-                resume_text += page.extract_text() or ''
-            # Extract keywords
+            resume_text = ''.join(page.extract_text() or '' for page in reader.pages)
             resume_keywords = extract_keywords(resume_text)
             job_keywords = extract_keywords(job_description)
-            # Compare keywords
             matched_keywords = resume_keywords.intersection(job_keywords)
             missing_keywords = job_keywords - resume_keywords
-            # Calculate resume score
             resume_score = calculate_resume_score(resume_text, matched_keywords, job_keywords)
-            # Detect job domain
             domain = detect_job_domain(job_description)
-            # Generate AI suggestions
-            suggestions = generate_suggestions(missing_keywords, job_description, domain)
-            # Prepare response
+            details = extract_resume_details(resume_text)
+            suggestions = generate_suggestions(missing_keywords, job_description, domain, details.get('name'))
             result = {
                 'matched': list(matched_keywords),
                 'missing': list(missing_keywords),
-                'resume_text': resume_text[:500],
+                'details': details,
                 'suggestions': suggestions,
                 'resume_score': resume_score,
                 'matched_json': json.dumps(list(matched_keywords)),
                 'missing_json': json.dumps(list(missing_keywords)),
-                'domain': domain  # For display
+                'domain': domain
             }
+            logging.debug(f"Result: {result}")
             return render_template('result.html', result=result)
         except Exception as e:
+            logging.error(f"PDF error: {str(e)}")
             return f'Error processing PDF: {str(e)}', 500
     return 'Invalid file type', 400
 
