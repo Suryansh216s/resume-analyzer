@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request
 import os
+from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 
@@ -25,7 +26,15 @@ def upload_file():
     if file and file.filename.endswith('.pdf'):
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filepath)
-        return 'File uploaded successfully!', 200
+        # Extract text from PDF
+        try:
+            reader = PdfReader(filepath)
+            text = ''
+            for page in reader.pages:
+                text += page.extract_text() or ''
+            return f'File uploaded successfully! Extracted text: {text[:500]}...'  # Show first 500 chars
+        except Exception as e:
+            return f'Error processing PDF: {str(e)}', 500
     return 'Invalid file type', 400
 
 if __name__ == '__main__':
