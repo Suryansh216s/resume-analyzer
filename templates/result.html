@@ -12,6 +12,7 @@
     <div class="score-bar">
         <div class="score-fill" style="width: {{ result.resume_score }}%;"></div>
     </div>
+    <h3>Detected Job Domain: {{ result.domain | capitalize }}</h3>
     <h3>Extracted Resume Text (First 500 chars):</h3>
     <p>{{ result.resume_text }}</p>
     <h3>Keyword Cloud:</h3>
@@ -32,7 +33,7 @@
             <li>{{ keyword }}</li>
         {% endfor %}
     </ul>
-    <h3>AI-Powered Suggestions:</h3>
+    <h3>AI-Powered Suggestions ({{ result.domain | capitalize }}):</h3>
     <div class="suggestions">
         {{ result.suggestions | safe }}
     </div>

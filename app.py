@@ -36,6 +36,23 @@ def extract_keywords(text):
             keywords.append(token.text.lower())
     return set(keywords)
 
+def detect_job_domain(job_description):
+    """Detect the job domain based on keywords in the job description."""
+    tech_keywords = {'software', 'developer', 'engineer', 'data', 'scientist', 'machine', 'learning', 'ai', 'python', 'sql', 'cloud', 'devops', 'cybersecurity'}
+    finance_keywords = {'finance', 'analyst', 'banking', 'investment', 'accounting', 'audit', 'tax', 'financial', 'portfolio', 'trading'}
+    healthcare_keywords = {'healthcare', 'nurse', 'doctor', 'medical', 'pharma', 'clinical', 'patient', 'therapy', 'diagnostics'}
+    
+    doc = nlp(job_description.lower())
+    keywords = {token.text for token in doc if token.pos_ in ('NOUN', 'PROPN')}
+    
+    if keywords & tech_keywords:
+        return 'tech'
+    elif keywords & finance_keywords:
+        return 'finance'
+    elif keywords & healthcare_keywords:
+        return 'healthcare'
+    return 'general'  # Default if no specific domain is detected
+
 def calculate_resume_score(resume_text, matched_keywords, job_keywords):
     """Calculate a resume strength score (0-100) based on keyword match, length, and formatting."""
     # Keyword match score (50%)
@@ -64,15 +81,24 @@ def calculate_resume_score(resume_text, matched_keywords, job_keywords):
     total_score = round(keyword_score + length_score + formatting_score)
     return max(0, min(total_score, 100))  # Clamp between 0 and 100
 
-def generate_suggestions(missing_keywords, job_description):
-    """Generate resume improvement suggestions using Gemini API."""
+def generate_suggestions(missing_keywords, job_description, domain):
+    """Generate resume improvement suggestions using Gemini API, tailored to job domain."""
     if not missing_keywords:
         return "Your resume aligns well with the job description!"
+    
+    # Domain-specific guidance
+    domain_guidance = {
+        'tech': "Focus on technical skills, projects, and tools. Highlight GitHub projects or certifications if relevant.",
+        'finance': "Emphasize financial modeling, analytical skills, or certifications like CFA or CPA.",
+        'healthcare': "Highlight patient care experience, clinical skills, or relevant certifications like RN or MD.",
+        'general': "Focus on transferable skills and clear, concise achievements."
+    }
+    
     prompt = f"""
-    You are a career coach. A job seeker is applying for a role with the following job description:
+    You are a career coach specializing in {domain} roles. A job seeker is applying for a role with this job description:
     '{job_description[:500]}'
     Their resume is missing these keywords: {', '.join(missing_keywords)}.
-    Provide 2-3 concise suggestions to improve their resume, focusing on incorporating these keywords.
+    Provide 2-3 concise suggestions to improve their resume, incorporating these keywords and following this guidance: {domain_guidance.get(domain, domain_guidance['general'])}.
     Format as a bullet list.
     """
     try:
@@ -116,8 +142,10 @@ def upload_file():
             missing_keywords = job_keywords - resume_keywords
             # Calculate resume score
             resume_score = calculate_resume_score(resume_text, matched_keywords, job_keywords)
+            # Detect job domain
+            domain = detect_job_domain(job_description)
             # Generate AI suggestions
-            suggestions = generate_suggestions(missing_keywords, job_description)
+            suggestions = generate_suggestions(missing_keywords, job_description, domain)
             # Prepare response
             result = {
                 'matched': list(matched_keywords),
@@ -125,8 +153,9 @@ def upload_file():
                 'resume_text': resume_text[:500],
                 'suggestions': suggestions,
                 'resume_score': resume_score,
-                'matched_json': json.dumps(list(matched_keywords)),  # For word cloud
-                'missing_json': json.dumps(list(missing_keywords))   # For word cloud
+                'matched_json': json.dumps(list(matched_keywords)),
+                'missing_json': json.dumps(list(missing_keywords)),
+                'domain': domain  # For display
             }
             return render_template('result.html', result=result)
         except Exception as e:
