@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <h1>Resume Analysis Results</h1>
+    <h3>Extracted Resume Text (First 500 chars):</h3>
+    <p>{{ result.resume_text }}</p>
+    <h3>Matched Keywords:</h3>
+    <ul>
+        {% for keyword in result.matched %}
+            <li>{{ keyword }}</li>
+        {% endfor %}
+    </ul>
+    <h3>Missing Keywords:</h3>
+    <ul>
+        {% for keyword in result.missing %}
+            <li>{{ keyword }}</li>
+        {% endfor %}
+    </ul>
+    <a href="/">Back to Home</a>
+</body>
+</html>

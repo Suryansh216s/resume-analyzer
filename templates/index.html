@@ -7,10 +7,17 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <h1>Welcome to Resume Analyzer</h1>
+    <h1>Resume Analyzer</h1>
     <form method="post" action="/upload" enctype="multipart/form-data">
-        <input type="file" name="resume" accept=".pdf">
-        <button type="submit">Upload Resume</button>
+        <div>
+            <label for="resume">Upload Resume (PDF):</label>
+            <input type="file" id="resume" name="resume" accept=".pdf" required>
+        </div>
+        <div>
+            <label for="job_description">Paste Job Description:</label>
+            <textarea id="job_description" name="job_description" rows="5" cols="50" required></textarea>
+        </div>
+        <button type="submit">Analyze Resume</button>
     </form>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
