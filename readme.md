@@ -1,6 +1,6 @@
  A web application that analyzes resumes against job descriptions, providing a resume strength score, keyword analysis, and AI-powered suggestions for improvement. Built with Flask, Gemini AI, SpaCy, and Docker, deployed on Heroku.
 
- ![Resume Analyzer Screenshot](screenshots/screenshot.png)
+ ![Resume Analyzer Screenshot](screenshot.png)
 
  ## Features
  - **Resume Parsing**: Extracts name, email, phone, and skills from PDF resumes.
@@ -79,8 +79,8 @@
     ```
 
  ## Screenshots
- ![Upload Page](screenshots/upload.png)
- ![Results Page](screenshots/results.png)
+ ![Upload Page](upload.png)
+ ![Results Page](results.png)
 
  ## Contributing
  Feel free to open issues or submit pull requests on [GitHub](https://github.com/Suryansh216s/resume-analyzer).
