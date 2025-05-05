@@ -8,6 +8,10 @@
 </head>
 <body>
     <h1>Resume Analysis Results</h1>
+    <h3>Resume Strength Score: {{ result.resume_score }}/100</h3>
+    <div class="score-bar">
+        <div class="score-fill" style="width: {{ result.resume_score }}%;"></div>
+    </div>
     <h3>Extracted Resume Text (First 500 chars):</h3>
     <p>{{ result.resume_text }}</p>
     <h3>Matched Keywords:</h3>

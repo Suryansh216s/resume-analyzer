@@ -35,6 +35,34 @@ def extract_keywords(text):
             keywords.append(token.text.lower())
     return set(keywords)
 
+def calculate_resume_score(resume_text, matched_keywords, job_keywords):
+    """Calculate a resume strength score (0-100) based on keyword match, length, and formatting."""
+    # Keyword match score (50%)
+    keyword_match_ratio = len(matched_keywords) / len(job_keywords) if job_keywords else 0
+    keyword_score = keyword_match_ratio * 50  # Max 50 points
+
+    # Resume length score (30%)
+    word_count = len(resume_text.split())
+    if 500 <= word_count <= 1000:
+        length_score = 30  # Ideal length
+    elif 300 <= word_count < 500 or 1000 < word_count <= 1500:
+        length_score = 20  # Slightly off
+    else:
+        length_score = 10  # Too short or too long
+
+    # Formatting score (20%)
+    formatting_score = 0
+    key_sections = ['skills', 'experience', 'education']
+    resume_lower = resume_text.lower()
+    for section in key_sections:
+        if section in resume_lower:
+            formatting_score += 6.67  # ~20/3 points per section
+    formatting_score = min(formatting_score, 20)  # Cap at 20
+
+    # Total score
+    total_score = round(keyword_score + length_score + formatting_score)
+    return max(0, min(total_score, 100))  # Clamp between 0 and 100
+
 def generate_suggestions(missing_keywords, job_description):
     """Generate resume improvement suggestions using Gemini API."""
     if not missing_keywords:
@@ -85,6 +113,8 @@ def upload_file():
             # Compare keywords
             matched_keywords = resume_keywords.intersection(job_keywords)
             missing_keywords = job_keywords - resume_keywords
+            # Calculate resume score
+            resume_score = calculate_resume_score(resume_text, matched_keywords, job_keywords)
             # Generate AI suggestions
             suggestions = generate_suggestions(missing_keywords, job_description)
             # Prepare response
@@ -92,7 +122,8 @@ def upload_file():
                 'matched': list(matched_keywords),
                 'missing': list(missing_keywords),
                 'resume_text': resume_text[:500],
-                'suggestions': suggestions
+                'suggestions': suggestions,
+                'resume_score': resume_score
             }
             return render_template('result.html', result=result)
         except Exception as e:
