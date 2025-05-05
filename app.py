@@ -4,6 +4,7 @@ from PyPDF2 import PdfReader
 import spacy
 import google.generativeai as genai
 from dotenv import load_dotenv
+import json
 
 app = Flask(__name__)
 
@@ -123,7 +124,9 @@ def upload_file():
                 'missing': list(missing_keywords),
                 'resume_text': resume_text[:500],
                 'suggestions': suggestions,
-                'resume_score': resume_score
+                'resume_score': resume_score,
+                'matched_json': json.dumps(list(matched_keywords)),  # For word cloud
+                'missing_json': json.dumps(list(missing_keywords))   # For word cloud
             }
             return render_template('result.html', result=result)
         except Exception as e:

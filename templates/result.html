@@ -14,6 +14,12 @@
     </div>
     <h3>Extracted Resume Text (First 500 chars):</h3>
     <p>{{ result.resume_text }}</p>
+    <h3>Keyword Cloud:</h3>
+    <div class="cloud-container">
+        <canvas id="keywordCloud" width="500" height="300" 
+                data-matched='{{ result.matched_json | safe }}' 
+                data-missing='{{ result.missing_json | safe }}'></canvas>
+    </div>
     <h3>Matched Keywords:</h3>
     <ul>
         {% for keyword in result.matched %}
@@ -31,5 +37,7 @@
         {{ result.suggestions | safe }}
     </div>
     <a href="/">Back to Home</a>
+    <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.min.js"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
